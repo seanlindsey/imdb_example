@@ -21,7 +21,8 @@ from utls.word2vec import Vocab
 #   http://cs.stanford.edu/~quocle/paragraph_vector.pdf
 # Authors: Quoc Le, Tomas Mikolov
 
-print('An attempt to reproduce something like "Experiment 3.1: IMDB sentiment", from the paper')
+print('An attempt to reproduce something like "Experiment 3.1: IMDB sentiment", from the paper.\n'
+      'This is gonna take a while, probably faster ways to build a reasonable classifier.')
 
 LabeledText = namedtuple('LabeledText', ['text', 'labels'])
 
@@ -156,7 +157,7 @@ print('Now building a classifier for our initial test, how does it do on pre-com
 
 clf = SVC(C=50.0, kernel='linear')
 
-# For testing and speed, we use a subset of train data
+# For our first test we use a subset of train data
 clf.fit(train_vectors[:20000], train_targets[:20000])
 
 print('Without loading in new stuff, lets get an idea of what we can do.')
