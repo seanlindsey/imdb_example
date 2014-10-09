@@ -1,0 +1,10 @@
+.py~
+*~
+*.csv
+aclImdb/*
+.idea/
+.pydevproject
+.project
+.directory
+.idea
+
