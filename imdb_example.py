@@ -21,7 +21,7 @@ from utls.word2vec import Vocab
 #   http://cs.stanford.edu/~quocle/paragraph_vector.pdf
 # Authors: Quoc Le, Tomas Mikolov
 
-print('An attempt to reproduce something like "Experiment 3.1: IMDB sentiment", from the paper.\n'
+print('An attempt to reproduce something like "Experiment 3.2: IMDB sentiment", from the paper.\n'
       'This is gonna take a while, probably faster ways to build a reasonable classifier.')
 
 LabeledText = namedtuple('LabeledText', ['text', 'labels'])
