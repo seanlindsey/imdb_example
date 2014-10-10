@@ -16,13 +16,14 @@ from numpy import array, int as np_int, uint32, uint8, random, empty, float32 as
 from six import iteritems, itervalues
 from six.moves import xrange
 from utls.word2vec import Vocab
+import logging
 
 # see paper "Distributed Representations of Sentences and Documents"
 #   http://cs.stanford.edu/~quocle/paragraph_vector.pdf
 # Authors: Quoc Le, Tomas Mikolov
 
 print('An attempt to reproduce something like "Experiment 3.2: IMDB sentiment", from the paper.\n'
-      'This is gonna take a while, probably faster ways to build a reasonable classifier.')
+      '\tThis is gonna take a while, probably faster ways to build a reasonable classifier.')
 
 LabeledText = namedtuple('LabeledText', ['text', 'labels'])
 
@@ -33,7 +34,7 @@ class LTIterator(object):
         self.fname = fname
         self.min_count = min_count
         self.fobj = open(self.fname)
-        # self.break_out_at = 10000
+        # self.break_out_at = 1000
         # self.loop_count = 0
 
     def __iter__(self):
@@ -58,8 +59,10 @@ def add_labels(doc2vec_obj, sentences):
     orig_total_words = sum(v.count for v in itervalues(doc2vec_obj.vocab))
     threshold_count = float(doc2vec_obj.sample) * orig_total_words
     sentence_no, vocab = -1, {}
+    rv_word_count = 1
     for sentence_no, sentence in enumerate(sentences):
         sentence_length = len(sentence.text)
+        rv_word_count += int(rv_word_count * ((sqrt(rv_word_count / threshold_count) + 1) * (threshold_count / rv_word_count) if doc2vec_obj.sample else 1.0))
         for label in sentence.labels:
             if label in vocab:
                 vocab[label].count += sentence_length
@@ -94,7 +97,7 @@ def add_labels(doc2vec_obj, sentences):
                     stack.append((node.left, array(list(codes) + [0], dtype=uint8), points))
                     stack.append((node.right, array(list(codes) + [1], dtype=uint8), points))
     else:
-        raise BaseException('PC Load Letter')
+        raise BaseException('PC LOAD LETTER')
     # extend the model's vector sets
     random.seed(doc2vec_obj.seed)
     doc2vec_obj.syn0 = concatenate((doc2vec_obj.syn0, empty((len(doc2vec_obj.vocab) - orig_len_vocab, doc2vec_obj.layer1_size), dtype=REAL)))
@@ -103,25 +106,34 @@ def add_labels(doc2vec_obj, sentences):
     if doc2vec_obj.hs:
         doc2vec_obj.syn1 = concatenate((doc2vec_obj.syn1, zeros((len(doc2vec_obj.vocab) - orig_len_vocab, doc2vec_obj.layer1_size), dtype=REAL)))
     doc2vec_obj.syn0norm = None
+    return rv_word_count
 
 
 VEC_SIZE = 400
 WINDOW_SIZE = 10
 MIN_COUNT = 9
+OUTPUT_OVERLOAD = False
 
 print('Building the 75k training vectors')
+
+if OUTPUT_OVERLOAD:
+    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 model_dm = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=1, sample=1e-4)
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
 model_dm.build_vocab(it)
+dm_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dm.vocab) if not k[0] in ['α', 'β']))
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
-model_dm.train(it)
+model_dm.train(it, total_words=dm_total_wc)
+
 
 model_dbow = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=0, sample=1e-4)
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
 model_dbow.build_vocab(it)
+dbow_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dbow.vocab) if not k[0] in ['α', 'β']))
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
-model_dbow.train(it)
+model_dbow.train(it, total_words=dbow_total_wc)
+
 
 print('For labeled data extracting vectors for training the classifier')
 # Extract the appropriate labels and concatenate their vectors
@@ -155,7 +167,7 @@ train_vectors = array(train_vectors)
 print('Now building a classifier for our initial test, how does it do on pre-computed vectors.')
 # The paper uses a neural network, whatever that is...
 
-clf = SVC(C=50.0, kernel='linear')
+clf = SGDClassifier()  # SVC(C=50.0, kernel='linear')
 
 # For our first test we use a subset of train data
 clf.fit(train_vectors[:20000], train_targets[:20000])
@@ -166,10 +178,10 @@ acc = metrics.accuracy_score(train_targets[20000:25000], predicted)
 print('Accuracy: ', str(acc * 100.0) + '%')
 
 print('Now we got some new reviews coming in.\n'
-      'But before we read then lets rebuild the classifier with all available data.')
+      '\tBut before we read them lets rebuild the classifier with all available data.')
 
 del clf
-clf = SVC(C=50.0, kernel='linear')
+clf = SGDClassifier()  # SVC(C=50.0, kernel='linear')
 clf.fit(train_vectors, train_targets)
 
 
@@ -181,15 +193,15 @@ model_dbow.train_words = False
 
 # Extend vocab with new labels
 it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-add_labels(model_dm, it)
+dm_total_wc = add_labels(model_dm, it)
 it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-add_labels(model_dbow, it)
+dbow_total_wc = add_labels(model_dbow, it)
 
 # Train the new labels
 it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-model_dm.train(it)
+model_dm.train(it, total_words=dm_total_wc)
 it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-model_dbow.train(it)
+model_dbow.train(it, total_words=dbow_total_wc)
 
 print('For test data extracting vectors for prediction')
 # Extract the appropriate labels and concatenate their vectors
