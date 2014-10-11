@@ -5,12 +5,12 @@ from nltk import wordpunct_tokenize
 import ujson
 
 """
-You're going mto need to have the data set from "http://ai.stanford.edu/~amaas/data/sentiment/"
+We're going to need to have the data set from "http://ai.stanford.edu/~amaas/data/sentiment/"
 
-When you extract aclImdb_v1.tar.gz if produces a folder called "aclImdb"
+When we extract aclImdb_v1.tar.gz it produces a folder called "aclImdb"
     that folder needs to be in the same directory as imdb_example.py and this file prep_data.py
 
-Run this, and you should be able to run the example.
+Run this, and we should be able to run the example.
 """
 
 train_doc_data = []
@@ -20,14 +20,14 @@ f_gen = os.walk('aclImdb/train/pos')
 for fitem in f_gen:
     for fname in fitem[2]:
         if fname.endswith('.txt'):
-            train_doc_data.append(ujson.dumps((wordpunct_tokenize(open(os.path.join('aclImdb/train/pos', fname)).read().replace('<br />', 'lbr')), ['αþ' + fname[:-4]])) + '\n')
+            train_doc_data.append(ujson.dumps((wordpunct_tokenize(open(os.path.join('aclImdb/train/pos', fname)).read().lower().replace('<br />', 'lbr ')), ['αþ' + fname[:-4]])) + '\n')
 
 f_gen = os.walk('aclImdb/train/neg')
 
 for fitem in f_gen:
     for fname in fitem[2]:
         if fname.endswith('.txt'):
-            train_doc_data.append(ujson.dumps((wordpunct_tokenize(open(os.path.join('aclImdb/train/neg', fname)).read().replace('<br />', 'lbr')), ['αñ' + fname[:-4]])) + '\n')
+            train_doc_data.append(ujson.dumps((wordpunct_tokenize(open(os.path.join('aclImdb/train/neg', fname)).read().lower().replace('<br />', 'lbr ')), ['αñ' + fname[:-4]])) + '\n')
 
 
 f_gen = os.walk('aclImdb/train/unsup')
@@ -35,7 +35,7 @@ f_gen = os.walk('aclImdb/train/unsup')
 for fitem in f_gen:
     for fname in fitem[2]:
         if fname.endswith('.txt'):
-            train_doc_data.append(ujson.dumps((wordpunct_tokenize(open(os.path.join('aclImdb/train/unsup', fname)).read().replace('<br />', 'lbr')), ['αû' + fname[:-4]])) + '\n')
+            train_doc_data.append(ujson.dumps((wordpunct_tokenize(open(os.path.join('aclImdb/train/unsup', fname)).read().lower().replace('<br />', 'lbr ')), ['αû' + fname[:-4]])) + '\n')
 
 shuffle(train_doc_data)
 
