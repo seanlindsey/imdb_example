@@ -343,7 +343,7 @@ if learn_from_deep_learn_tut:
 
     dataset2 = load_data(dataset2)
     print('learnrate .012, n_e 10k n_hid 100, batch_size 50')
-    test_mlp(dataset)
+    test_mlp(dataset2)
     #evaluate_lenet5(dataset2)
 
 
