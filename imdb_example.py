@@ -9,7 +9,9 @@ from sklearn.svm import SVC
 from sklearn.metrics import metrics
 from sklearn.linear_model import SGDClassifier
 
-from numpy import concatenate, zeros
+from numpy import concatenate, zeros, asarray, mean, inf, ndarray
+import time
+from utls.convolutional_mlp import evaluate_lenet5
 from utls.doc2vec import Doc2Vec
 import ujson
 from numpy import array, int as np_int, uint32, uint8, random, empty, float32 as REAL
@@ -17,6 +19,8 @@ from six import iteritems, itervalues
 from six.moves import xrange
 from utls.word2vec import Vocab
 import logging
+
+from utls.logistic_sgd import LogisticRegression, load_data, load_data_mn
 
 # see paper "Distributed Representations of Sentences and Documents"
 #   http://cs.stanford.edu/~quocle/paragraph_vector.pdf
@@ -26,7 +30,7 @@ print('An attempt to reproduce something like "Experiment 3.2: IMDB sentiment", 
       '\tThis is gonna take a while, probably faster ways to build a reasonable classifier.')
 
 LabeledText = namedtuple('LabeledText', ['text', 'labels'])
-
+print('ext lab false, nuer x1' )
 
 # Generator that can pre-pad the sentences with nulls, like in the paper.
 class LTIterator(object):
@@ -35,8 +39,8 @@ class LTIterator(object):
         self.min_count = min_count
         self.fobj = open(self.fname)
         self.extend_labels = False
-        # self.break_out_at = 1000
-        # self.loop_count = 0
+        self.break_out_at = 1000
+        self.loop_count = 0
 
     def __iter__(self):
         for line in self.fobj:
@@ -46,12 +50,12 @@ class LTIterator(object):
             l_text, l_label = ujson.loads(line[:-1] if line.endswith('\n') else line)
             sentence_length = len(l_text)
             if self.min_count and sentence_length < self.min_count:
-                l_text = (['null'] * (self.min_count - sentence_length)) + l_text
-            if self.extend_labels and l_label and l_label[0][0] == 'α':
-                if l_label[0].startswith('αþ'):
-                    l_label.append('ζpos')
-                elif l_label[0].startswith('αñ'):
-                    l_label.append('ζneg')
+                l_text = ([u'null'] * (self.min_count - sentence_length)) + l_text
+            if self.extend_labels and l_label and l_label[0][0] == u'α':
+                if l_label[0].startswith(u'αþ'):
+                    l_label.append(u'ζpos')
+                elif l_label[0].startswith(u'αñ'):
+                    l_label.append(u'ζneg')
             yield LabeledText(l_text, l_label)
 
 
@@ -71,26 +75,25 @@ def get_labeled_text(doc2vec_obj, sentence):
                 doc2vec_obj.vocab[label] = label_v
                 added_label_items.append(label_v)
         if added_label_items:
-            doc2vec_obj.create_binary_tree()
-            # heap = list(itervalues(doc2vec_obj.vocab))
-            # heapq.heapify(heap)
-            # for i in xrange(len(doc2vec_obj.vocab) - 1):
-            #     min1 = heapq.heappop(heap)
-            #     min2 = heapq.heappop(heap)
-            #     heapq.heappush(heap, Vocab(count=min1.count + min2.count, index=i + len(doc2vec_obj.vocab), left=min1, right=min2))
-            #     if heap:
-            #         max_depth, stack = 0, [(heap[0], [], [])]
-            #         while stack:
-            #             node, codes, points = stack.pop()
-            #             if node.index < len(doc2vec_obj.vocab):
-            #                 # leaf node => store its path from the root
-            #                 node.code, node.point = codes, points
-            #                 max_depth = max(len(codes), max_depth)
-            #             else:
-            #                 # inner node => continue recursion
-            #                 points = array(list(points) + [node.index - len(doc2vec_obj.vocab)], dtype=uint32)
-            #                 stack.append((node.left, array(list(codes) + [0], dtype=uint8), points))
-            #                 stack.append((node.right, array(list(codes) + [1], dtype=uint8), points))
+            heap = added_label_items
+            heapq.heapify(heap)
+            for i in xrange(len(doc2vec_obj.vocab) - 1):
+                min1 = heapq.heappop(heap)
+                min2 = heapq.heappop(heap)
+                heapq.heappush(heap, Vocab(count=min1.count + min2.count, index=i + len(doc2vec_obj.vocab), left=min1, right=min2))
+                if heap:
+                    max_depth, stack = 0, [(heap[0], [], [])]
+                    while stack:
+                        node, codes, points = stack.pop()
+                        if node.index < len(doc2vec_obj.vocab):
+                            # leaf node => store its path from the root
+                            node.code, node.point = codes, points
+                            max_depth = max(len(codes), max_depth)
+                        else:
+                            # inner node => continue recursion
+                            points = array(list(points) + [node.index - len(doc2vec_obj.vocab)], dtype=uint32)
+                            stack.append((node.left, array(list(codes) + [0], dtype=uint8), points))
+                            stack.append((node.right, array(list(codes) + [1], dtype=uint8), points))
             random.seed(doc2vec_obj.seed)
             doc2vec_obj.syn0 = concatenate((doc2vec_obj.syn0, empty((len(doc2vec_obj.vocab) - orig_len_vocab, doc2vec_obj.layer1_size), dtype=REAL)))
             for i in xrange(orig_len_vocab, len(doc2vec_obj.vocab)):
@@ -137,7 +140,7 @@ def add_labeled_texts(doc2vec_obj, sentences):
     # add new vocab items to our hs tree
     if doc2vec_obj.hs:
         # doc2vec_obj.create_binary_tree()
-        heap = list(itervalues(doc2vec_obj.vocab))
+        heap = list(itervalues(vocab))
         heapq.heapify(heap)
         for i in xrange(orig_len_vocab, len(doc2vec_obj.vocab) - 1):
             min1, min2 = heapq.heappop(heap), heapq.heappop(heap)
@@ -187,8 +190,8 @@ if OUTPUT_OVERLOAD:
 model_dm = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=1, sample=1e-4)
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
 model_dm.build_vocab(it)
-dm_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dm.vocab) if not k[0] in ['α', 'β', 'ζ']))
-for _ in xrange(5):
+dm_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dm.vocab) if not k[0] in [u'α', u'β', u'ζ']))
+for _ in xrange(1):
     it = LTIterator('train_data.csv', min_count=MIN_COUNT)
     model_dm.train(it, total_words=dm_total_wc)
 
@@ -196,8 +199,8 @@ for _ in xrange(5):
 model_dbow = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=0, sample=1e-4)
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
 model_dbow.build_vocab(it)
-dbow_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dbow.vocab) if not k[0] in ['α', 'β', 'ζ']))
-for __ in xrange(5):
+dbow_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dbow.vocab) if not k[0] in [u'α', u'β', u'ζ']))
+for __ in xrange(1):
     it = LTIterator('train_data.csv', min_count=MIN_COUNT)
     model_dbow.train(it, total_words=dbow_total_wc)
 
@@ -211,7 +214,7 @@ VecTuple = namedtuple('VecTuple', ['label', 'vec'])
 vec_tuples_train = []
 
 for key, dm_itm in model_dm.vocab.items():
-    if key.startswith('αþ') or key.startswith('αñ'):
+    if key.startswith(u'αþ') or key.startswith(u'αñ'):
         dm_idx = dm_itm.index
         dbow_idx = model_dbow.vocab[key].index
         vec_tuples_train.append(VecTuple(key, concatenate((model_dm.syn0[dm_idx], model_dbow.syn0[dbow_idx]))))
@@ -221,21 +224,31 @@ for key, dm_itm in model_dm.vocab.items():
 train_vectors = []
 train_targets = []
 
+valid_vectors = []
+valid_targets = []
+
 for item in vec_tuples_train:
-    if item[0].startswith('αþ'):
+    if item[0].startswith(u'αþ'):
         train_targets.append(np_int(1))
         train_vectors.append(item[1])
-    elif item[0].startswith('αñ'):
+        if random.random() < .25:
+            valid_targets.append(np_int(1))
+            valid_vectors.append(item[1])
+    elif item[0].startswith(u'αñ'):
         train_targets.append(np_int(0))
         train_vectors.append(item[1])
+        if random.random() < .25:
+            valid_targets.append(np_int(0))
+            valid_vectors.append(item[1])
 
 train_vectors = array(train_vectors)
+valid_vectors = array(valid_vectors)
 
 if TRY_WITH_PREBUILD:
     print('Now building a classifier for our initial test, how does it do on pre-computed vectors.')
     # The paper uses a neural network, whatever that is...
 
-    clf = SVC(C=50.0, kernel='linear')
+    clf = SGDClassifier() #  SVC(C=50.0)
 
     # For our first test we use a subset of train data
     clf.fit(train_vectors[:20000], train_targets[:20000])
@@ -250,8 +263,13 @@ if TRY_WITH_PREBUILD:
 else:
     print('Now building a classifier')
 
-clf = SVC(C=50.0, kernel='linear')
-clf.fit(train_vectors, train_targets)
+
+# clf = SGDClassifier() #  SVC(C=50.0, kernel='linear')
+# clf.fit(train_vectors, train_targets)
+
+
+import theano
+import theano.tensor as T
 
 
 print('Extending vocab and building vectors for new labels')
@@ -279,7 +297,7 @@ print('For test data extracting vectors for prediction')
 vec_tuples_test = []
 
 for key, dm_itm in model_dm.vocab.items():
-    if key.startswith('βþ') or key.startswith('βñ'):
+    if key.startswith(u'βþ') or key.startswith(u'βñ'):
         dm_idx = dm_itm.index
         dbow_idx = model_dbow.vocab[key].index
         vec_tuples_test.append(VecTuple(key, concatenate((model_dm.syn0[dm_idx], model_dbow.syn0[dbow_idx]))))
@@ -290,29 +308,69 @@ test_vectors = []
 test_targets = []
 
 for item in vec_tuples_test:
-    if item[0].startswith('βþ'):
+    if item[0].startswith(u'βþ'):
         test_targets.append(np_int(1))
         test_vectors.append(item[1])
-    elif item[0].startswith('βñ'):
+    elif item[0].startswith(u'βñ'):
         test_targets.append(np_int(0))
         test_vectors.append(item[1])
 
 print('Now we predict sentiment of new labels')
 
 # Grab prediction values
-predicted = clf.predict(test_vectors)
+#predicted = clf.predict(test_vectors)
+
+
+# from utls.logistic_sgd import load_data_mn
+#
+dataset = load_data_mn('mnist.pkl.gz')
+
+learn_from_deep_learn_tut = True
+if learn_from_deep_learn_tut:
+    from utls.mlp import test_mlp
+
+    test_vectors = array(test_vectors)
+    train_vectors = array(train_vectors)
+    valid_vectors = array(valid_vectors)
+
+    test_targets = array(test_targets)
+    train_targets = array(train_targets)
+    valid_targets = array(valid_targets)
+
+
+
+    dataset2 = ((test_vectors, test_targets), (valid_vectors, valid_targets), (train_vectors, train_targets))
+
+    dataset2 = load_data(dataset2)
+    print('learnrate .012, n_e 10k n_hid 100, batch_size 50')
+    test_mlp(dataset)
+    #evaluate_lenet5(dataset2)
+
+
+if not learn_from_deep_learn_tut:
+    clf = SGDClassifier()
+    clf.fit(train_vectors, train_targets)
+
+    pred = clf.predict(test_vectors)
+
+    print('acc', metrics.accuracy_score(pred, test_targets))
+
+# test_mlp(dataset)
+
+#test_mlp((test_vectors[:150], test_vectors[:150]), (test_vectors[150:], test_vectors[150:]), (train_vectors, train_targets))
+
 
 # Send our best sentiments (bow)
-acc = metrics.accuracy_score(test_targets, predicted)
+# acc = metrics.accuracy_score(test_targets, predicted)
 
-print('Accuracy: ', str(acc * 100.0) + '%')
+# print('Accuracy: ', str(acc * 100.0) + '%')
 
 if TEST_GET_VEC:
     print('Try playing with adding stuff one by one')
 
     # Make the LabeledText
-    good_rev = LabeledText(['good', 'wonderful', 'enlightening', 'great', 'movie', ',', 'powerful', 'performance', ',', 'i', 'plan', 'on', 'watching', 'it', 'again', '.'], ['βþ100010110110'])
-    bad_rev = LabeledText(['bad', 'poor', 'terrible', 'awful', 'movie', ',', 'never', 'watching', 'it', 'again', '.'], ['βñ100010110110'])
+    good_rev = LabeledText([u'good', u'wonderful', u'enlightening', u'great', u'movie', u',', u'powerful', u'performance', u',', u'i', u'plan', u'on', u'watching', u'it', u'again', u'.'], [u'βþ100010110110'])
+    bad_rev = LabeledText([u'bad', u'poor', u'terrible', u'awful', u'movie', u',', u'never', u'watching', u'it', u'again', u'.'], [u'βñ100010110110'])
 
     # Push the vectors into our models
     good_rev_labels_dm = get_labeled_text(model_dm, good_rev)
@@ -321,16 +379,16 @@ if TEST_GET_VEC:
     bad_rev_labels_dbow = get_labeled_text(model_dbow, bad_rev)
 
     # Grab the vector indexes from the models
-    good_rev_dm_idx = model_dm.vocab['βþ100010110110'].index
-    good_rev_dbow_idx = model_dbow.vocab['βþ100010110110'].index
-    bad_rev_dm_idx = model_dm.vocab['βñ100010110110'].index
-    bad_rev_dbow_idx = model_dbow.vocab['βñ100010110110'].index
+    good_rev_dm_idx = model_dm.vocab[u'βþ100010110110'].index
+    good_rev_dbow_idx = model_dbow.vocab[u'βþ100010110110'].index
+    bad_rev_dm_idx = model_dm.vocab[u'βñ100010110110'].index
+    bad_rev_dbow_idx = model_dbow.vocab[u'βñ100010110110'].index
 
     # Prepare the vectors for our classifier
     good_rev_vec = concatenate((model_dm.syn0[good_rev_dm_idx], model_dbow.syn0[good_rev_dbow_idx]))
     bad_rev_vec = concatenate((model_dm.syn0[bad_rev_dm_idx], model_dbow.syn0[bad_rev_dbow_idx]))
 
     # Print out what we get from classifier
-    print('We should see, [1 0], for good and bad')
+    print(u'We should see, [1 0], for good and bad')
     print(clf.predict([good_rev_vec, bad_rev_vec]))
 
