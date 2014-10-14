@@ -174,7 +174,7 @@ class MLP(object):
         self.params = self.hiddenLayer.params + self.logRegressionLayer.params
 
 
-def test_mlp(fdataset, learning_rate=.01,
+def test_mlp(fdataset, learning_rate = .025,
              L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
              batch_size=20, n_hidden=500):
     """

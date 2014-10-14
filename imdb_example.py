@@ -35,31 +35,36 @@ print('ext lab false, nuer x1' )
 # Generator that can pre-pad the sentences with nulls, like in the paper.
 class LTIterator(object):
     def __init__(self, fname, min_count):
-        self.fname = fname
+        if type(fname) == str:
+            self.fname = fname
+            self.fobjs = [open(self.fname)]
+        if type(fname) == list:
+            self.fobjs = [open(fname_i) for fname_i in fname]
         self.min_count = min_count
-        self.fobj = open(self.fname)
         self.extend_labels = False
         self.break_out_at = 1000
         self.loop_count = 0
 
     def __iter__(self):
-        for line in self.fobj:
-            # self.loop_count += 1
-            # if self.loop_count > self.break_out_at:
-            #     break
-            l_text, l_label = ujson.loads(line[:-1] if line.endswith('\n') else line)
-            sentence_length = len(l_text)
-            if self.min_count and sentence_length < self.min_count:
-                l_text = ([u'null'] * (self.min_count - sentence_length)) + l_text
-            if self.extend_labels and l_label and l_label[0][0] == u'α':
-                if l_label[0].startswith(u'αþ'):
-                    l_label.append(u'ζpos')
-                elif l_label[0].startswith(u'αñ'):
-                    l_label.append(u'ζneg')
-            yield LabeledText(l_text, l_label)
+        for fobj in self.fobjs:
+            for line in fobj:
+                # self.loop_count += 1
+                # if self.loop_count > self.break_out_at:
+                #     break
+                l_text, l_label = ujson.loads(line[:-1] if line.endswith('\n') else line)
+                sentence_length = len(l_text)
+                if self.min_count and sentence_length < self.min_count:
+                    l_text = ([u'\u0000'] * (self.min_count - sentence_length)) + l_text
+                # if self.extend_labels and l_label and l_label[0][0] == u'α':
+                #     if l_label[0].startswith(u'αþ'):
+                #         l_label.append(u'ζpos')
+                #     elif l_label[0].startswith(u'αñ'):
+                #         l_label.append(u'ζneg')
+                yield LabeledText(l_text, l_label)
 
 
-# TODO: test, add comments
+# TODO: test, add comments, most importantly get to work
+#   Event
 def get_labeled_text(doc2vec_obj, sentence):
     if doc2vec_obj.hs:
         orig_len_vocab = len(doc2vec_obj.vocab)
@@ -174,11 +179,17 @@ def add_labeled_texts(doc2vec_obj, sentences):
 VEC_SIZE = 400
 WINDOW_SIZE = 10
 MIN_COUNT = 9
+SAMPLE_P = 1e-3
+ALPHA_P = .025
+MIN_ALPHA = .00001
 # A note about logging with doc2vec: We are going to need to come up with our own word counts to get accurate percentages
 #   An accurate count could come from counting everything in the vocab that's not a label if training on the full set.
 #   Also anything could return an accurate count that passes over our iterator.
 OUTPUT_OVERLOAD = False
+DM_TRAIN_RUNS = 1
+DBOW_TRAIN_RUNS = 1
 
+USE_DBOW = True
 TEST_GET_VEC = False
 TRY_WITH_PREBUILD = False
 
@@ -187,22 +198,28 @@ print('Building the 75k training vectors')
 if OUTPUT_OVERLOAD:
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-model_dm = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=1, sample=1e-4)
-it = LTIterator('train_data.csv', min_count=MIN_COUNT)
+model_dm = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=1, sample=SAMPLE_P, alpha=.025, min_alpha=.0001)
+print(model_dm)
+print(model_dm.sg, model_dm.min_alpha, model_dm.sample, model_dm.cbow_mean, DM_TRAIN_RUNS)
+it = LTIterator(['train_data.csv', 'test_data.csv'], min_count=MIN_COUNT)
 model_dm.build_vocab(it)
 dm_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dm.vocab) if not k[0] in [u'α', u'β', u'ζ']))
-for _ in xrange(1):
+for _ in xrange(DM_TRAIN_RUNS):
+    s_time = time.time()
     it = LTIterator('train_data.csv', min_count=MIN_COUNT)
     model_dm.train(it, total_words=dm_total_wc)
+    print(time.time() - s_time)
 
-
-model_dbow = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=0, sample=1e-4)
-it = LTIterator('train_data.csv', min_count=MIN_COUNT)
-model_dbow.build_vocab(it)
-dbow_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dbow.vocab) if not k[0] in [u'α', u'β', u'ζ']))
-for __ in xrange(1):
-    it = LTIterator('train_data.csv', min_count=MIN_COUNT)
-    model_dbow.train(it, total_words=dbow_total_wc)
+if USE_DBOW:
+    model_dbow = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=0, sample=SAMPLE_P)
+    print(model_dbow)
+    print(model_dbow.sg, model_dbow.min_alpha, model_dbow.sample, model_dbow.cbow_mean, DBOW_TRAIN_RUNS)
+    it = LTIterator(['train_data.csv', 'test_data.csv'], min_count=MIN_COUNT)
+    model_dbow.build_vocab(it)
+    dbow_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dbow.vocab) if not k[0] in [u'α', u'β', u'ζ']))
+    for _ in xrange(DBOW_TRAIN_RUNS):
+        it = LTIterator('train_data.csv', min_count=MIN_COUNT)
+        model_dbow.train(it, total_words=dbow_total_wc)
 
 
 print('For labeled data extracting vectors for training the classifier')
@@ -216,8 +233,11 @@ vec_tuples_train = []
 for key, dm_itm in model_dm.vocab.items():
     if key.startswith(u'αþ') or key.startswith(u'αñ'):
         dm_idx = dm_itm.index
-        dbow_idx = model_dbow.vocab[key].index
-        vec_tuples_train.append(VecTuple(key, concatenate((model_dm.syn0[dm_idx], model_dbow.syn0[dbow_idx]))))
+        if USE_DBOW:
+            dbow_idx = model_dbow.vocab[key].index
+            vec_tuples_train.append(VecTuple(key, concatenate((model_dm.syn0[dm_idx], model_dbow.syn0[dbow_idx]))))
+        else:
+            vec_tuples_train.append(VecTuple(key, model_dm.syn0[dm_idx]))
 
 
 # Extract separated training data/targets from the list of labels and vectors
@@ -274,21 +294,27 @@ import theano.tensor as T
 
 print('Extending vocab and building vectors for new labels')
 
-# Freeze the words,should only matter for dm (high inflection)?
+# Freeze the words
 model_dm.train_words = False
-model_dbow.train_words = False
+# it = LTIterator('test_data.csv', min_count=MIN_COUNT)
+# dm_total_wc = add_labeled_texts(model_dm, it)
+it = LTIterator('test_data.csv', min_count=MIN_COUNT)
+s_time = time.time()
+for _ in range(DM_TRAIN_RUNS):
+    model_dm.train(it)
+print('test time: ' + str(time.time() - s_time))
 
-# Extend vocab with new labels
-it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-dm_total_wc = add_labeled_texts(model_dm, it)
-it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-dbow_total_wc = add_labeled_texts(model_dbow, it)
+if USE_DBOW:
+    model_dbow.train_words = False
 
-# Train the new labels
-it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-model_dm.train(it, total_words=dm_total_wc)
-it = LTIterator('test_data.csv', min_count=MIN_COUNT)
-model_dbow.train(it, total_words=dbow_total_wc)
+    # Extend vocab with new labels
+
+    # it = LTIterator('test_data.csv', min_count=MIN_COUNT)
+    # dbow_total_wc = add_labeled_texts(model_dbow, it)
+
+    # Train the new labels
+    it = LTIterator('test_data.csv', min_count=MIN_COUNT)
+    model_dbow.train(it)
 
 print('For test data extracting vectors for prediction')
 # Extract the appropriate labels and concatenate their vectors
@@ -299,8 +325,12 @@ vec_tuples_test = []
 for key, dm_itm in model_dm.vocab.items():
     if key.startswith(u'βþ') or key.startswith(u'βñ'):
         dm_idx = dm_itm.index
-        dbow_idx = model_dbow.vocab[key].index
-        vec_tuples_test.append(VecTuple(key, concatenate((model_dm.syn0[dm_idx], model_dbow.syn0[dbow_idx]))))
+        if USE_DBOW:
+            dbow_idx = model_dbow.vocab[key].index
+            vec_tuples_test.append(VecTuple(key, concatenate((model_dm.syn0[dm_idx], model_dbow.syn0[dbow_idx]))))
+        else:
+            vec_tuples_test.append(VecTuple(key, model_dm.syn0[dm_idx]))
+
 
 
 # Extract separated training data/targets from the list of labels and vectors
@@ -315,19 +345,13 @@ for item in vec_tuples_test:
         test_targets.append(np_int(0))
         test_vectors.append(item[1])
 
-print('Now we predict sentiment of new labels')
+print('Now we test accuracy...')
 
-# Grab prediction values
-#predicted = clf.predict(test_vectors)
-
-
-# from utls.logistic_sgd import load_data_mn
-#
-dataset = load_data_mn('mnist.pkl.gz')
 
 learn_from_deep_learn_tut = True
 if learn_from_deep_learn_tut:
     from utls.mlp import test_mlp
+    dataset = load_data_mn('mnist.pkl.gz')
 
     test_vectors = array(test_vectors)
     train_vectors = array(train_vectors)
@@ -349,24 +373,16 @@ if learn_from_deep_learn_tut:
 
 if not learn_from_deep_learn_tut:
     clf = SGDClassifier()
+    print(clf)
     clf.fit(train_vectors, train_targets)
-
     pred = clf.predict(test_vectors)
 
-    print('acc', metrics.accuracy_score(pred, test_targets))
-
-# test_mlp(dataset)
-
-#test_mlp((test_vectors[:150], test_vectors[:150]), (test_vectors[150:], test_vectors[150:]), (train_vectors, train_targets))
+    print('Accuracy: ', str(metrics.accuracy_score(pred, test_targets) * 100.0) + '%')
 
 
-# Send our best sentiments (bow)
-# acc = metrics.accuracy_score(test_targets, predicted)
-
-# print('Accuracy: ', str(acc * 100.0) + '%')
-
-if TEST_GET_VEC:
+if TEST_GET_VEC and not learn_from_deep_learn_tut:
     print('Try playing with adding stuff one by one')
+    # DOES NOT WORK, although there should be ways to handle it...
 
     # Make the LabeledText
     good_rev = LabeledText([u'good', u'wonderful', u'enlightening', u'great', u'movie', u',', u'powerful', u'performance', u',', u'i', u'plan', u'on', u'watching', u'it', u'again', u'.'], [u'βþ100010110110'])

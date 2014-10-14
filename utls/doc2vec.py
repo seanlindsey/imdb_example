@@ -141,7 +141,7 @@ class Doc2Vec(Word2Vec):
     """Class for training, using and evaluating neural networks described in http://arxiv.org/pdf/1405.4053v2.pdf"""
     def __init__(self, sentences=None, size=300, alpha=0.025, window=8, min_count=5,
                  sample=0, seed=1, workers=1, min_alpha=0.0001, dm=1, hs=1, negative=0,
-                 dm_mean=0, train_words=True, train_lbls=True, pad_sentences=False):
+                 dm_mean=0, train_words=True, train_lbls=True):
         """
         Initialize the model from an iterable of `sentences`. Each sentence is a
         list of LabeledText objects that will be used for training.
@@ -173,7 +173,6 @@ class Doc2Vec(Word2Vec):
                           sg=(1+dm) % 2, hs=hs, negative=negative, cbow_mean=dm_mean)
         self.train_words = train_words
         self.train_lbls = train_lbls
-        self.pad_sentences = pad_sentences
         if sentences is not None:
             self.build_vocab(sentences)
             self.train(sentences)

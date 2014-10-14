@@ -446,7 +446,7 @@ class Word2Vec(utils.SaveLoad):
 
         start, next_report = time.time(), [1.0]
         word_count = [word_count]
-        total_words = total_words or int(sum(v.count * v.sample_probability for k, v in iteritems(self.vocab) if not k[0] in ['α', 'β']))
+        total_words = total_words or int(sum(v.count * v.sample_probability for k, v in iteritems(self.vocab) if not k[0] in [u'α', u'β']))
         jobs = Queue(maxsize=2 * self.workers)  # buffer ahead only a limited number of jobs.. this is the reason we can't simply use ThreadPool :(
         lock = threading.Lock()  # for shared state (=number of words trained so far, log reports...)
 
