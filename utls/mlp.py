@@ -18,6 +18,8 @@ References:
     - textbooks: "Pattern Recognition and Machine Learning" -
                  Christopher M. Bishop, section 5
 
+PLEASE NOTE THIS CODE MAY BE HAVE BEEN MODIFIED (IMDB_EXAMPLE)
+
 """
 __docformat__ = 'restructedtext en'
 
