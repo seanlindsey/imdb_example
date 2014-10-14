@@ -18,6 +18,8 @@ References:
     - textbooks: "Pattern Recognition and Machine Learning" -
                  Christopher M. Bishop, section 5
 
+Copyright (c) 2008--2013, Theano Development Team
+All rights reserved.
 PLEASE NOTE THIS CODE MAY BE HAVE BEEN MODIFIED (IMDB_EXAMPLE)
 
 """

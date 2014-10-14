@@ -21,6 +21,8 @@ References:
    Recognition, Proceedings of the IEEE, 86(11):2278-2324, November 1998.
    http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf
 
+Copyright (c) 2008--2013, Theano Development Team
+All rights reserved.
 PLEASE NOTE THIS CODE MAY BE HAVE BEEN MODIFIED (IMDB_EXAMPLE)
 
 
