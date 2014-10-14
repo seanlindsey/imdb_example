@@ -1,6 +1,9 @@
 .py~
+*.pyc
 *~
 *.csv
+data/*
+utls/__pycache__/
 aclImdb/*
 .idea/
 .pydevproject
