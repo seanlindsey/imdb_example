@@ -137,13 +137,7 @@ model_dm = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
 model_dm.build_vocab(it)
 dm_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dm.vocab) if not k[0] in ['α', 'β', 'ζ']))
-# for _ in xrange(5):
-#     it = LTIterator('train_data.csv', min_count=MIN_COUNT)
-#     model_dm.train(it, total_words=dm_total_wc)
-num_iters = 20
-for i in xrange(0, num_iters+1):
-    model_dm.alpha = 0.025 * (num_iters - i) / num_iters + 0.0001 * i / num_iters
-    model_dm.min_alpha = model_dm.alpha
+for _ in xrange(5):
     it = LTIterator('train_data.csv', min_count=MIN_COUNT)
     model_dm.train(it, total_words=dm_total_wc)
 
@@ -152,16 +146,10 @@ model_dbow = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_coun
 it = LTIterator('train_data.csv', min_count=MIN_COUNT)
 model_dbow.build_vocab(it)
 dbow_total_wc = int(sum(v.count * v.sample_probability for k, v in iteritems(model_dbow.vocab) if not k[0] in ['α', 'β', 'ζ']))
-# for __ in xrange(5):
-#     it = LTIterator('train_data.csv', min_count=MIN_COUNT)
-#     model_dbow.train(it, total_words=dbow_total_wc)
-
-num_iters = 20
-for i in xrange(0, num_iters+1):
-    model_dbow.alpha = 0.025 * (num_iters - i) / num_iters + 0.0001 * i / num_iters
-    model_dbow.min_alpha = model_dbow.alpha
+for __ in xrange(5):
     it = LTIterator('train_data.csv', min_count=MIN_COUNT)
     model_dbow.train(it, total_words=dbow_total_wc)
+
 
 print('For labeled data extracting vectors for training the classifier')
 # Extract the appropriate labels and concatenate their vectors
@@ -196,7 +184,7 @@ if TRY_WITH_PREBUILD:
     print('Now building a classifier for our initial test, how does it do on pre-computed vectors.')
     # The paper uses a neural network, whatever that is...
 
-    clf = SVC(C=50.0, kernel='rbf')
+    clf = SVC(C=50.0, gamma=.01, kernel='rbf')
 
     # For our first test we use a subset of train data
     clf.fit(train_vectors[:20000], train_targets[:20000])
