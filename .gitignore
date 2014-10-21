@@ -7,4 +7,5 @@ aclImdb/*
 .project
 .directory
 .idea
-
+utls/__pycache__/
+.pyc
