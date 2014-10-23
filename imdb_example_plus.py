@@ -20,9 +20,10 @@ print('The Objective here is to combine Doc2Vec dense-vectors and BOW sparse vec
 #   http://cs.stanford.edu/~quocle/paragraph_vector.pdf
 # Authors: Quoc Le, Tomas Mikolov
 
-VEC_SIZE = 400
+VEC_SIZE = 100
 WINDOW_SIZE = 10
 MIN_COUNT = 9
+NUM_ITERS = 10
 # A note about logging with doc2vec: We are going to need to come up with our own word counts to get accurate percentages
 #   An accurate count could come from counting everything in the vocab that's not a label if training on the full set.
 #   Also anything could return an accurate count that passes over our iterator.
@@ -39,11 +40,11 @@ if OUTPUT_OVERLOAD:
 
 
 model_dm = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=1, sample=1e-4)
-train_model(model_dm, 'train_data.csv', num_iters=5, min_count=MIN_COUNT)
+train_model(model_dm, 'train_data.csv', num_iters=NUM_ITERS, min_count=MIN_COUNT)
 
 
 model_dbow = Doc2Vec(sentences=None, size=VEC_SIZE, window=WINDOW_SIZE, min_count=MIN_COUNT, workers=8, dm=0, sample=1e-4)
-train_model(model_dbow, 'train_data.csv', num_iters=5, min_count=MIN_COUNT)
+train_model(model_dbow, 'train_data.csv', num_iters=NUM_ITERS, min_count=MIN_COUNT)
 
 # Freeze the words
 model_dm.train_words = False
